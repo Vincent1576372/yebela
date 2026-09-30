@@ -98,8 +98,11 @@ button.btn{cursor:pointer;font:inherit;font-weight:800}
   <p>Montant à régler maintenant : <b style="font:900 1.6rem Archivo;color:var(--red)">25 $</b></p>
   <div class="notice">
     <strong>Avant de continuer</strong>
-    <p>Effectuez le paiement selon le moyen convenu avec l'équipe YÉBÉLA Academy. Cette page ne vérifie pas automatiquement une transaction bancaire.</p>
+    <p>Payez les 25 $ sur l'un des numéros ci-dessous, puis notez l'identifiant de la transaction reçu par SMS. L'équipe vérifie chaque paiement avant d'ouvrir votre accès.</p><div id="paynums"></div>
   </div>
+  <label for="tx">Identifiant de la transaction (reçu par SMS de l'opérateur)
+    <input id="tx" name="txid" required minlength="4" maxlength="60" autocomplete="off" placeholder="Ex. : code reçu par SMS">
+  </label>
   <label for="pm">Moyen de paiement
     <select id="pm" name="payment_method">
       <option value="M-Pesa">M-Pesa</option>
@@ -113,11 +116,13 @@ button.btn{cursor:pointer;font:inherit;font-weight:800}
   </label>
   <p class="note" id="payHelp">Les 25 $ suivants seront dus à la délivrance du certificat, puis 50 $ à partir du premier salaire mensuel, après engagement et prise de fonction. Les conditions d'affectation et de rémunération restent soumises à validation.</p>
   <button class="btn" id="payb" type="button">J’AI EFFECTUÉ LE PAIEMENT</button>
-  <p class="mute">Aucune transaction réelle n’est exécutée directement depuis ce fichier HTML.</p>
+  <p class="mute">Ce site n'exécute aucun paiement : il enregistre votre demande pour vérification par l'équipe.</p>
 </div>
 
 <div class="pnl" id="acc" hidden role="status" aria-live="polite">
-  <h3>Confirmation en attente de vérification</h3>
+  <h3>Demande envoyée : vérification en cours</h3>
+  <p id="saveState" class="notice"></p>
+  <p class="note">Quand votre paiement est validé, ouvrez l'espace membre, appuyez sur « Créer mon compte » avec le <b>même e-mail</b> que sur la fiche, puis choisissez votre mot de passe.</p>
   <p class="mute">Votre demande de confirmation est prête. L’équipe YÉBÉLA doit vérifier le paiement avant d’activer ou de confirmer votre accès.</p>
   <div class="wam" id="wam"></div>
   <div class="row">
@@ -506,6 +511,7 @@ button.btn{cursor:pointer;font:inherit;font-weight:800}
       `Province / pays : ${normalize(candidate.prov)}`,
       `Moyen de paiement : ${method}`,
       `Numéro utilisé pour le paiement : ${paidNumber}`,
+      `Identifiant de la transaction : ${normalize(document.getElementById("tx") && document.getElementById("tx").value)}`,
       "",
       "Merci de vérifier le paiement et de me confirmer les prochaines étapes."
     ].join("\n");
@@ -530,7 +536,16 @@ button.btn{cursor:pointer;font:inherit;font-weight:800}
       payButton.disabled = true;
       payButton.textContent = "Préparation…";
 
-      window.setTimeout(() => {
+      window.setTimeout(async () => {
+        let saved = false;
+        try {
+          if (window.YB_SAVE) {
+            await window.YB_SAVE(Object.assign({}, state.candidate, { payMethod: normalize(paymentMethod && paymentMethod.value), payNumber: normalize(paymentNumber && paymentNumber.value), txId: normalize(document.getElementById("tx").value) }));
+            saved = true;
+          }
+        } catch (err) { console.warn(err); }
+        const st = document.getElementById("saveState");
+        if (st) st.textContent = saved ? "✅ Votre demande est enregistrée. L'équipe YÉBÉLA vérifie votre paiement, puis vous confirme votre accès." : "⚠️ L'enregistrement automatique a échoué. Envoyez le message WhatsApp ci-dessous pour que l'équipe reçoive votre demande.";
         const message = buildCandidatePaymentMessage();
 
         if (messagePreview) messagePreview.textContent = message;
@@ -682,5 +697,20 @@ button.btn{cursor:pointer;font:inherit;font-weight:800}
     if (!$(id)) console.warn(`[YÉBÉLA] Élément manquant : #${id}`);
   });
 })();
+</script>
+<script>
+(function(){var PAY=[/* Exemple : {op:'Airtel Money',num:'0999 095 205',nom:'Nom du titulaire'} */];
+var box=document.getElementById('paynums');if(!box)return;
+if(!PAY.length){box.innerHTML='<p class="note">Le numéro de paiement vous est communiqué sur WhatsApp au <b>+243 999 095 205</b>.</p>';return}
+box.innerHTML='<div class="notice"><strong>Numéros de paiement</strong>'+PAY.map(function(x){return '<p>'+x.op+' : <b>'+x.num+'</b> (au nom de '+x.nom+')</p>'}).join('')+'</div>'})();
+</script>
+<script type="module">
+import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import {getFirestore,collection,addDoc,serverTimestamp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+const firebaseConfig={apiKey:"AIzaSyDQ-zIaInC1UmuBz5UpamXBySkvYIRNbko",authDomain:"yebela-academy.firebaseapp.com",projectId:"yebela-academy",storageBucket:"yebela-academy.firebasestorage.app",messagingSenderId:"970935803403",appId:"1:970935803403:web:036628e6df45edff59310e"};
+const db=getFirestore(initializeApp(firebaseConfig));
+const K=['nom','wa','mail','ville','prov','age','niv','sit','v1','v2','why','d1','d2','src','terms','payMethod','payNumber','txId'];
+window.YB_SAVE=async(d)=>{const o={};K.forEach(k=>{o[k]=String(d[k]==null?'':d[k]).trim().slice(0,k==='why'?1500:200)});
+  o.status='pending';o.createdAt=serverTimestamp();await addDoc(collection(db,'applications'),o)};
 </script>
 </body></html>
