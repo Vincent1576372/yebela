@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="fr"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><meta name="robots" content="noindex,nofollow">
+<title>Administration – YÉBÉLA ACADEMY</title>
+<style>
+:root{--bg:#f5f5f5;--card:#fff;--ink:#111;--mute:#5b5b5b;--line:#e2e2e2;--red:#d10000;--ok:#1b7a34;box-sizing:border-box}
+@media (prefers-color-scheme:dark){:root{--bg:#0b0b0b;--card:#181818;--ink:#f2f2f2;--mute:#a8a8a8;--line:#2a2a2a;--red:#ff4d4d;--ok:#5ad27a}}
+*{box-sizing:border-box;margin:0;padding:0}body{background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,Arial,sans-serif;padding-bottom:env(safe-area-inset-bottom,0)}
+[hidden]{display:none!important}
+#login{min-height:100vh;display:grid;place-items:center;padding:24px;background:#000;color:#fff}
+#login form{max-width:380px;width:100%;display:grid;gap:12px}
+input{font:inherit;padding:12px;border:1.5px solid var(--line);border-radius:10px;width:100%;min-height:48px;background:#111;color:#fff}
+.btn{font:inherit;font-weight:700;background:#d10000;color:#fff;border:0;border-radius:10px;padding:12px 16px;min-height:46px;cursor:pointer;text-decoration:none;display:inline-block}
+.btn.o{background:transparent;color:var(--ink);border:1.5px solid var(--line)}.btn.g{background:var(--ok)}.btn.sm{padding:8px 12px;min-height:38px;font-size:14px}
+header{background:#000;color:#fff;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;gap:10px;position:sticky;top:0;z-index:5}
+header small{color:#bbb;display:block}
+.tabs{display:flex;gap:6px;padding:12px 16px;overflow-x:auto}.tabs button{white-space:nowrap}
+main{max-width:900px;margin:0 auto;padding:0 16px 40px}
+.c{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:12px}
+.c h3{font-size:1rem}.m{color:var(--mute);font-size:.9rem}.row{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.pill{display:inline-block;font-size:.75rem;font-weight:700;padding:2px 10px;border-radius:99px;background:var(--line);margin-left:6px}
+.pill.pending{background:#ffd54a;color:#000}.pill.approved{background:var(--ok);color:#fff}.pill.rejected,.pill.revoked{background:var(--red);color:#fff}
+.bar{height:8px;background:var(--line);border-radius:6px;overflow:hidden;margin-top:8px}.bar i{display:block;height:100%;background:var(--red)}
+#err{color:#ff8080;min-height:1.2em}.t{font-size:.85rem;color:var(--mute)}
+</style></head><body>
+<div id="login"><form id="lf"><h2>Administration YÉBÉLA</h2><p class="m" style="color:#bbb">Accès réservé à l'équipe.</p>
+<input id="em" type="email" placeholder="E-mail" autocomplete="username" required><input id="pw" type="password" placeholder="Mot de passe" autocomplete="current-password" required>
+<button class="btn" type="submit">Se connecter</button><p id="err" role="alert"></p></form></div>
+<div id="app" hidden><header><div><b id="who"></b><small id="role"></small></div><button class="btn o sm" id="out" style="color:#fff;border-color:#555">Déconnexion</button></header>
+<div class="tabs" id="tabs"></div><main id="view"></main></div>
+<script type="module">
+import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import {getAuth,signInWithEmailAndPassword,signOut,onAuthStateChanged} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import {getFirestore,doc,getDoc,getDocs,collection,query,orderBy,writeBatch,serverTimestamp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+const firebaseConfig={apiKey:"AIzaSyDQ-zIaInC1UmuBz5UpamXBySkvYIRNbko",authDomain:"yebela-academy.firebaseapp.com",projectId:"yebela-academy",storageBucket:"yebela-academy.firebasestorage.app",messagingSenderId:"970935803403",appId:"1:970935803403:web:036628e6df45edff59310e"};
+const app=initializeApp(firebaseConfig),auth=getAuth(app),db=getFirestore(app);
+const $=(i)=>document.getElementById(i);let me=null,role='',tab='',filter='pending';
+const el=(t,c,x)=>{const n=document.createElement(t);if(c)n.className=c;if(x!=null)n.textContent=x;return n};
+const when=(t)=>t&&t.toDate?t.toDate().toLocaleString('fr-FR',{dateStyle:'short',timeStyle:'short'}):'—';
+const ms=(t)=>t&&t.toDate?t.toDate().getTime():0;
+$('lf').addEventListener('submit',async(e)=>{e.preventDefault();$('err').textContent='';try{await signInWithEmailAndPassword(auth,$('em').value.trim(),$('pw').value)}catch(x){$('err').textContent='E-mail ou mot de passe incorrect.'}});
+$('out').onclick=()=>signOut(auth);
+onAuthStateChanged(auth,async(u)=>{
+  if(!u){me=null;$('app').hidden=true;$('login').hidden=false;return}
+  let r='';try{const s=await getDoc(doc(db,'staff',u.uid));if(s.exists())r=s.data().role||''}catch(x){}
+  if(r!=='owner'&&r!=='admin'){$('err').textContent="Ce compte n'a pas accès à l'administration.";await signOut(auth);return}
+  me=u;role=r;$('login').hidden=true;$('app').hidden=false;
+  $('who').textContent=u.displayName||u.email;$('role').textContent=r==='owner'?'Propriétaire : accès complet':'Administrateur : suivi des étudiants';
+  const tabs=[['students','Étudiants'],['journal','Journal']];if(r==='owner')tabs.unshift(['apps','Inscriptions']);
+  const box=$('tabs');box.replaceChildren();
+  tabs.forEach(([k,l])=>{const b=el('button','btn o sm',l);b.onclick=()=>show(k);b.dataset.k=k;box.append(b)});
+  show(tabs[0][0]);
+});
+function show(k){tab=k;document.querySelectorAll('#tabs button').forEach(b=>b.style.background=b.dataset.k===k?'var(--line)':'');
+  ({apps,students,journal})[k]().catch(()=>{const v=$('view');v.replaceChildren(el('p','m','Impossible de charger les données (droits ou connexion).'))})}
+function wa(a){let n=String(a.wa||'').replace(/\D/g,'');if(n.startsWith('0'))n='243'+n.slice(1);
+  const link=new URL('espace-membre.html',location.href).href;
+  const msg=`Bonjour ${a.nom}, votre paiement est confirmé ✅. Pour accéder à votre espace : ouvrez ${link} , appuyez sur « Créer mon compte » avec l'e-mail ${a.mail} et choisissez votre mot de passe. Vérifiez ensuite votre e-mail (regardez aussi les spams).`;
+  return 'https://wa.me/'+n+'?text='+encodeURIComponent(msg)}
+async function decide(a,status){
+  const b=writeBatch(db),ref=doc(db,'applications',a.id),ae=doc(db,'approved',String(a.mail).trim().toLowerCase());
+  b.update(ref,{status,decidedAt:serverTimestamp(),decidedBy:me.email});
+  if(status==='approved')b.set(ae,{name:a.nom,appId:a.id,approvedAt:serverTimestamp(),by:me.email});
+  if(status==='revoked')b.delete(ae);
+  await b.commit();apps();
+}
+async function apps(){
+  const v=$('view');v.replaceChildren();
+  const bar=el('div','row');bar.style.marginBottom='12px';
+  [['pending','En attente'],['all','Toutes']].forEach(([k,l])=>{const b=el('button','btn o sm',l);if(filter===k)b.style.background='var(--line)';b.onclick=()=>{filter=k;apps()};bar.append(b)});
+  v.append(bar);
+  const snap=await getDocs(query(collection(db,'applications'),orderBy('createdAt','desc')));
+  let n=0;
+  snap.forEach((d)=>{const a=Object.assign({id:d.id},d.data());if(filter==='pending'&&a.status!=='pending')return;n++;
+    const c=el('div','c'),h=el('h3',null,a.nom);const p=el('span','pill '+a.status,({pending:'En attente',approved:'Approuvée',rejected:'Refusée',revoked:'Révoquée'})[a.status]||a.status);h.append(p);c.append(h);
+    [`WhatsApp : ${a.wa}  ·  E-mail : ${a.mail}`,`${a.ville||''} ${a.prov||''}  ·  Âge : ${a.age||'—'}`,`Paiement : ${a.payMethod||'—'}, numéro ${a.payNumber||'—'}`,`Identifiant de transaction : ${a.txId}`,`Reçue le ${when(a.createdAt)}`].forEach(t=>c.append(el('p','m',t)));
+    if(a.why)c.append(el('p','m','Motivation : '+a.why));
+    const r=el('div','row');
+    if(a.status==='pending'){const y=el('button','btn g sm','Approuver le paiement');y.onclick=()=>{if(confirm('Vérifiez que vous avez bien reçu ce paiement. Approuver ?'))decide(a,'approved')};const no=el('button','btn o sm','Refuser');no.onclick=()=>{if(confirm('Refuser cette fiche ?'))decide(a,'rejected')};r.append(y,no)}
+    if(a.status==='approved'){const w=el('a','btn sm','Envoyer la confirmation WhatsApp');w.href=wa(a);w.target='_blank';w.rel='noopener';const rv=el('button','btn o sm','Révoquer');rv.onclick=()=>{if(confirm("Retirer l'accès de cette personne ?"))decide(a,'revoked')};r.append(w,rv)}
+    c.append(r);v.append(c)});
+  if(!n)v.append(el('p','m','Aucune fiche à afficher.'));
+}
+async function students(){
+  const v=$('view');v.replaceChildren();
+  const snap=await getDocs(collection(db,'progress')),rows=[];snap.forEach(d=>rows.push(d.data()));
+  rows.sort((a,b)=>ms(b.updatedAt)-ms(a.updatedAt));
+  let started=new Set(rows.map(r=>String(r.email||'').toLowerCase()));
+  rows.forEach(r=>{const tot=r.total||45,pct=Math.min(100,Math.round(100*(r.count||0)/tot));
+    const c=el('div','c');c.append(el('h3',null,r.name||r.email),el('p','m',r.email),el('p','m',`${r.count||0} leçon(s) terminée(s) sur ${tot} (${pct} %)`),el('p','t','Dernière activité : '+when(r.updatedAt)));
+    const b=el('div','bar'),i=el('i');i.style.width=pct+'%';b.append(i);c.append(b);v.append(c)});
+  if(role==='owner'){try{const ap=await getDocs(collection(db,'approved'));ap.forEach(d=>{if(started.has(d.id))return;const x=d.data(),c=el('div','c');c.append(el('h3',null,x.name||d.id),el('p','m',d.id),el('p','t',"Approuvé, n'a pas encore commencé (compte non créé ou jamais connecté)."));v.append(c)})}catch(x){}}
+  if(!v.children.length)v.append(el('p','m','Aucun étudiant pour le moment.'));
+}
+async function journal(){
+  const v=$('view');v.replaceChildren();const ev=[];
+  const ps=await getDocs(collection(db,'progress'));
+  ps.forEach(d=>{const r=d.data(),n=r.name||r.email;if(r.joinedAt)ev.push([ms(r.joinedAt),r.joinedAt,`${n} a rejoint la formation`]);if(r.updatedAt&&(r.count||0)>0)ev.push([ms(r.updatedAt),r.updatedAt,`${n} : ${r.count}/${r.total||45} leçons terminées`])});
+  if(role==='owner'){try{const as=await getDocs(collection(db,'applications'));as.forEach(d=>{const a=d.data();
+    ev.push([ms(a.createdAt),a.createdAt,`${a.nom} a envoyé sa fiche (${a.payMethod||'paiement'}, transaction ${a.txId})`]);
+    if(a.decidedAt)ev.push([ms(a.decidedAt),a.decidedAt,`${a.decidedBy||'Équipe'} : fiche de ${a.nom} → ${({approved:'approuvée',rejected:'refusée',revoked:'accès révoqué'})[a.status]||a.status}`])})}catch(x){}}
+  ev.sort((a,b)=>b[0]-a[0]);
+  ev.slice(0,150).forEach(e=>{const c=el('div','c');c.append(el('p',null,e[2]),el('p','t',when(e[1])));v.append(c)});
+  if(!ev.length)v.append(el('p','m','Aucune activité pour le moment.'));
+}
+</script></body></html>

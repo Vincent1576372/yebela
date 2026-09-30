@@ -219,6 +219,10 @@ main{width:min(1200px,100%);margin:0 auto;padding:26px 18px 105px}
           <label for="lname">Adresse e-mail</label>
           <input id="lname" type="email" inputmode="email" placeholder="vous@exemple.com" required autocomplete="username">
         </div>
+        <div class="field" id="namefield" hidden>
+          <label for="lfullname">Nom complet</label>
+          <input id="lfullname" placeholder="Ex. Marie Kalenga" autocomplete="name">
+        </div>
         <div class="field">
           <label for="lpass">Mot de passe</label>
           <div class="input-wrap">
@@ -227,9 +231,10 @@ main{width:min(1200px,100%);margin:0 auto;padding:26px 18px 105px}
           </div>
         </div>
         <div class="login-actions">
-          <button class="btn" type="submit"><span class="icon" data-icon="login"></span>SE CONNECTER</button>
+          <button class="btn" id="submitBtn" type="submit"><span class="icon" data-icon="login"></span>SE CONNECTER</button>
           <a class="btn secondary" href="https://vincent1576372.github.io/yebela/" target="_blank" rel="noopener"><span class="icon" data-icon="external"></span>DÉCOUVRIR LA FORMATION</a>
         </div>
+        <button type="button" id="modeBtn" style="background:none;border:0;color:#fff;text-decoration:underline;cursor:pointer;font:inherit;padding:6px 0;text-align:left">Première connexion ? Créer mon compte</button>
         <p id="login-error" class="form-note" role="alert"></p>
         
       </form>
@@ -338,7 +343,7 @@ function icon(name){
 
 function $(id){return document.getElementById(id)}
 function esc(value){const d=document.createElement('div');d.textContent=String(value??'');return d.innerHTML}
-function save(){try{localStorage.setItem(KEY,JSON.stringify(state))}catch(e){showToast('Impossible d’enregistrer sur cet appareil')}}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(state))}catch(e){showToast('Impossible d’enregistrer sur cet appareil')};try{if(window.YB_AUTH&&window.YB_AUTH.sync)window.YB_AUTH.sync(state.done,LESSONS.length)}catch(e){}}
 function doneCount(){return LESSONS.filter(l=>state.done[l.id]).length}
 function progress(){return Math.round(doneCount()/LESSONS.length*100)}
 function nextLesson(){return LESSONS.find(l=>!state.done[l.id])||null}
@@ -368,19 +373,35 @@ togglePass.addEventListener('click',()=>{
   togglePass.innerHTML=icon(show?'eyeoff':'eye');togglePass.setAttribute('aria-label',show?'Masquer le mot de passe':'Afficher le mot de passe');
 });
 
+let signup=false;
+function setSignup(v){signup=v;$('namefield').hidden=!v;$('submitBtn').lastChild.textContent=v?'CRÉER MON COMPTE':'SE CONNECTER';$('modeBtn').textContent=v?'J\'ai déjà un compte : me connecter':'Première connexion ? Créer mon compte'}
+$('modeBtn').addEventListener('click',()=>{$('login-error').textContent='';setSignup(!signup)});
 $('lf').addEventListener('submit',async(e)=>{
   e.preventDefault();
   const email=$('lname').value.trim(),pass=$('lpass').value,error=$('login-error');
   error.textContent='';
   if(!window.YB_AUTH){error.textContent='La connexion est en cours de configuration. Réessayez plus tard.';return}
   if(!email||!pass){error.textContent='Saisissez votre e-mail et votre mot de passe.';return}
+  if(signup){
+    const name=$('lfullname').value.trim();
+    if(name.length<3){error.textContent='Saisissez votre nom complet.';return}
+    if(pass.length<8){error.textContent='Choisissez un mot de passe d\'au moins 8 caractères.';return}
+    try{await window.YB_AUTH.signUp(email,pass,name);setSignup(false);error.textContent='Compte créé. Un e-mail de vérification vient de vous être envoyé (regardez aussi les spams). Cliquez sur le lien, puis connectez-vous ici.'}
+    catch(err){error.textContent=err&&err.code==='auth/email-already-in-use'?'Cet e-mail a déjà un compte. Connectez-vous.':'Création impossible. Vérifiez vos informations.'}
+    return;
+  }
   try{await window.YB_AUTH.signIn(email,pass)}catch(err){error.textContent='E-mail ou mot de passe incorrect.'}
 });
-window.addEventListener('yb-auth',(e)=>{
+window.addEventListener('yb-auth',async(e)=>{
   const u=e.detail;
+  if(u&&u.gate){
+    $('login-error').textContent=u.gate==='verify'?'Votre e-mail n\'est pas encore vérifié. Un nouveau lien vient de vous être envoyé (regardez les spams). Cliquez dessus, puis reconnectez-vous.':'Votre inscription n\'est pas encore approuvée. L\'équipe YÉBÉLA vérifie votre paiement. Réessayez plus tard ou écrivez-nous sur WhatsApp.';
+    try{await window.YB_AUTH.signOut()}catch(x){}
+    return;
+  }
   if(u){
     KEY='yb-'+u.uid;let saved={};try{saved=JSON.parse(localStorage.getItem(KEY)||'{}')}catch(x){}
-    state={name:u.name,done:saved.done||{},notes:saved.notes||{},open:Number.isInteger(saved.open)?saved.open:0,theme:state.theme};
+    state={name:u.name,done:Object.assign({},u.remoteDone||{},saved.done||{}),notes:saved.notes||{},open:Number.isInteger(saved.open)?saved.open:0,theme:state.theme};
     start();showToast('Bienvenue dans votre espace membre');
   }else{$('app').style.display='none';$('login').style.display='grid'}
 });
@@ -515,13 +536,41 @@ function bind(){
 </script>
 <script type="module">
 import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import {getAuth,signInWithEmailAndPassword,signOut,onAuthStateChanged} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import {getAuth,createUserWithEmailAndPassword,updateProfile,sendEmailVerification,signInWithEmailAndPassword,signOut,onAuthStateChanged} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import {getFirestore,doc,getDoc,setDoc,serverTimestamp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 const firebaseConfig={apiKey:"AIzaSyDQ-zIaInC1UmuBz5UpamXBySkvYIRNbko",authDomain:"yebela-academy.firebaseapp.com",projectId:"yebela-academy",storageBucket:"yebela-academy.firebasestorage.app",messagingSenderId:"970935803403",appId:"1:970935803403:web:036628e6df45edff59310e"};
-{
-  const auth=getAuth(initializeApp(firebaseConfig));
-  window.YB_AUTH={signIn:(e,p)=>signInWithEmailAndPassword(auth,e,p),signOut:()=>signOut(auth)};
-  onAuthStateChanged(auth,(u)=>window.dispatchEvent(new CustomEvent('yb-auth',{detail:u?{uid:u.uid,name:u.displayName||u.email}:null})));
-}
+const app=initializeApp(firebaseConfig),auth=getAuth(app),db=getFirestore(app);
+let signingUp=false,timer=null,cur=null;
+window.YB_AUTH={
+  signIn:(e,p)=>signInWithEmailAndPassword(auth,e,p),
+  signOut:()=>signOut(auth),
+  async signUp(e,p,n){signingUp=true;try{const c=await createUserWithEmailAndPassword(auth,e,p);await updateProfile(c.user,{displayName:n});await sendEmailVerification(c.user);await signOut(auth)}finally{signingUp=false}},
+  sync(done,total){
+    if(!cur)return;clearTimeout(timer);
+    timer=setTimeout(()=>{const d={};Object.keys(done||{}).forEach(k=>{if(done[k])d[k]=true});
+      setDoc(doc(db,'progress',cur.uid),{name:cur.name,email:cur.email,done:d,count:Object.keys(d).length,total:total||0,updatedAt:serverTimestamp()},{merge:true}).catch(()=>{})},800);
+  }
+};
+onAuthStateChanged(auth,async(u)=>{
+  if(signingUp)return;
+  const emit=(d)=>window.dispatchEvent(new CustomEvent('yb-auth',{detail:d}));
+  cur=null;
+  if(!u){emit(null);return}
+  const email=(u.email||'').toLowerCase(),name=u.displayName||u.email;
+  let role='';
+  try{const s=await getDoc(doc(db,'staff',u.uid));if(s.exists())role=s.data().role||''}catch(e){}
+  if(!role){
+    if(!u.emailVerified){try{await sendEmailVerification(u)}catch(e){}emit({gate:'verify'});return}
+    let ok=false;try{ok=(await getDoc(doc(db,'approved',email))).exists()}catch(e){}
+    if(!ok){emit({gate:'pending'});return}
+  }
+  let remote={};
+  if(!role){try{const pr=doc(db,'progress',u.uid),s=await getDoc(pr);
+    if(s.exists())remote=s.data().done||{};
+    else await setDoc(pr,{name,email,done:{},count:0,total:0,joinedAt:serverTimestamp(),updatedAt:serverTimestamp()})}catch(e){}}
+  cur=role?null:{uid:u.uid,name,email};
+  emit({uid:u.uid,name,email,role,remoteDone:remote});
+});
 </script>
 </body>
 </html>
