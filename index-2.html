@@ -699,10 +699,10 @@ button.btn{cursor:pointer;font:inherit;font-weight:800}
 })();
 </script>
 <script>
-(function(){var PAY=[/* Exemple : {op:'Airtel Money',num:'0999 095 205',nom:'Nom du titulaire'} */];
+(function(){var PAY=[{op:'Airtel Money',num:'0999 095 205',nom:'AMURI EMERY'},{op:'M-Pesa',num:'0815 666 308',nom:'AMURI EMERY'},{op:'Orange Money',num:'0801 210 017',nom:'AMURI EMERY'}];
 var box=document.getElementById('paynums');if(!box)return;
 if(!PAY.length){box.innerHTML='<p class="note">Le numéro de paiement vous est communiqué sur WhatsApp au <b>+243 999 095 205</b>.</p>';return}
-box.innerHTML='<div class="notice"><strong>Numéros de paiement</strong>'+PAY.map(function(x){return '<p>'+x.op+' : <b>'+x.num+'</b> (au nom de '+x.nom+')</p>'}).join('')+'</div>'})();
+box.innerHTML='<div class="notice"><strong>Numéros de paiement</strong>'+PAY.map(function(x){return '<p>'+x.op+' : <b>'+x.num+'</b>'+(x.nom?' (au nom de '+x.nom+')':'')+'</p>'}).join('')+'</div>'})();
 </script>
 <script type="module">
 import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
