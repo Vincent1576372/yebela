@@ -72,7 +72,7 @@ async function apps(){
   let n=0;
   snap.forEach((d)=>{const a=Object.assign({id:d.id},d.data());if(filter==='pending'&&a.status!=='pending')return;n++;
     const c=el('div','c'),h=el('h3',null,a.nom);const p=el('span','pill '+a.status,({pending:'En attente',approved:'Approuvée',rejected:'Refusée',revoked:'Révoquée'})[a.status]||a.status);h.append(p);c.append(h);
-    [`WhatsApp : ${a.wa}  ·  E-mail : ${a.mail}`,`${a.ville||''} ${a.prov||''}  ·  Âge : ${a.age||'—'}`,`Paiement : ${a.payMethod||'—'}, numéro ${a.payNumber||'—'}`,`Identifiant de transaction : ${a.txId}`,`Catégorie : ${({closing:'Formation de closing',ia:'Production de formation IA ultra réaliste',accompagnement:'Accompagnement'})[a.cat]||'Formation de closing'} · Montant : ${a.montant||'25'} $`,`Reçue le ${when(a.createdAt)}`].forEach(t=>c.append(el('p','m',t)));
+    [`WhatsApp : ${a.wa}  ·  E-mail : ${a.mail}`,`${a.ville||''} ${a.prov||''}  ·  Âge : ${a.age||'—'}`,`Paiement : ${a.payMethod||'—'}, numéro ${a.payNumber||'—'}`,`Identifiant de transaction : ${a.txId}`,`Catégorie : ${({closing:'Formation de closing',ia:'Produit de formation IA ultra réaliste',accompagnement:'Accompagnement'})[a.cat]||'Formation de closing'} · Montant : ${a.montant||'25'} $`,`Reçue le ${when(a.createdAt)}`].forEach(t=>c.append(el('p','m',t)));
     if(a.why)c.append(el('p','m','Motivation : '+a.why));
     const r=el('div','row');
     if(a.status==='pending'){const y=el('button','btn g sm','Approuver le paiement');y.onclick=()=>{if(confirm('Vérifiez que vous avez bien reçu ce paiement. Approuver ?'))decide(a,'approved')};const no=el('button','btn o sm','Refuser');no.onclick=()=>{if(confirm('Refuser cette fiche ?'))decide(a,'rejected')};r.append(y,no)}
